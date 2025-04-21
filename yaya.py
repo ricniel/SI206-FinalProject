@@ -13,6 +13,71 @@ from selenium.webdriver import Safari
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+LOCATION_IDS = {
+    "Antananarivo": 1,   # Madagascar
+    "Sao Paulo": 2,      # Brazil
+    "Sydney": 3,         # Australia
+    "Cape Town": 4,      # South Africa
+    "Buenos Aires": 5,   # Argentina
+    "Jakarta": 6,        # Indonesia
+    "Mumbai": 7,         # India
+    "Nairobi": 8,        # Kenya
+    "Lima": 9,           # Peru
+    "Bangkok": 10,       # Thailand
+    "Bogotá": 11,        # Colombia
+    "Kuala Lumpur": 12,  # Malaysia
+    "Manila": 13,        # Philippines
+    "San José": 14,      # Costa Rica
+    "Auckland": 15,      # New Zealand
+    "Hanoi": 16,         # Vietnam
+    "Delhi": 17,         # India
+    "Santiago": 18,      # Chile
+    "Melbourne": 19,     # Australia
+    "Accra": 20          # Ghana
+}
+NOAA_REGIONS = {
+    "globe": ["Antananarivo", "Sao Paulo", "Sydney", "Cape Town", "Buenos Aires", "Jakarta", "Mumbai", "Nairobi", "Lima", "Bangkok", "Bogotá", "Kuala Lumpur", "Manila", "San José", "Auckland", "Hanoi", "Delhi", "Santiago", "Melbourne", "Accra"],
+    "africa": ["Cape Town", "Nairobi", "Accra"],
+    "europe": [],  
+    "gulfOfAmerica": ["Sao Paulo", "Buenos Aires", "Lima", "Bogotá", "Santiago"]
+}
+IUCN_REGION_MAP = {
+    "Global": NOAA_REGIONS["globe"],
+    "Africa": NOAA_REGIONS["africa"], 
+    "Northern Africa": NOAA_REGIONS["africa"],
+    "Western Africa": NOAA_REGIONS["africa"],
+    "Pan-Africa": NOAA_REGIONS["africa"],
+    "Mediterranean": NOAA_REGIONS["africa"],  
+    "Gulf of America": NOAA_REGIONS["gulfOfAmerica"],
+    "Europe": NOAA_REGIONS["europe"], 
+    "Persian Gulf": [], 
+}
+def set_up_tables():
+    """
+    Sets up the species and climate tables in ecoalert.db
+
+    Parameters
+    ----------------------------
+    None
+
+    Returns
+    ----------------------------
+    cur: cursor
+        The database cursor object
+    conn: connection
+        The database connection object
+    """
+    conn = sqlite3.connect("ecoalert.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY AUTOINCREMENT, common_name TEXT, population_status TEXT, red_list_category TEXT, location_id INTEGER, UNIQUE(common_name, location_id))"
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS climate (id INTEGER PRIMARY KEY AUTOINCREMENT, region TEXT, year INTEGER, temp_anomaly REAL, location_id INTEGER, UNIQUE(region, year, location_id))"
+    )
+    conn.commit()
+    return cursor, conn
+
 def scrape_noaa_data(region_list, driver):
     """
     Scrapes NOAA site for avg yearly land and ocean temp going back 100 years
@@ -43,7 +108,40 @@ def scrape_noaa_data(region_list, driver):
             
     return temp_anomaly_list
 
-    pass
+def store_noaa_data(noaa_data):
+    """
+    Stores NOAA data into the climate table, up to 25 entries
+
+    Parameters
+    ----------------------------
+    noaa_data: list of tuples
+        region, year, and temp anomaly data
+
+    Returns
+    ----------------------------
+    Integer: number of new entries stored
+    """
+    cursor, conn = set_up_tables()
+    count = 0
+    for region, year, anomaly in noaa_data:
+        if count >= 25:
+            break
+        locations = NOAA_REGIONS.get(region, [])
+        for location in locations:
+            location_id = LOCATION_IDS.get(location)
+            if not location_id:
+                continue
+            cursor.execute("SELECT COUNT(*) FROM climate WHERE region=? AND year=? AND location_id=?", (region, year, location_id))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("INSERT OR IGNORE INTO climate (region, year, temp_anomaly, location_id) VALUES (?, ?, ?, ?)",
+                            (region, year, float(anomaly), location_id))
+                count += 1
+                print(f"Stored NOAA data: Region {region}, Year {year}, Location ID {location_id}")
+    conn.commit()
+    conn.close()
+    print(f"Total NOAA entries stored: {count}")
+    return count
+    
 
 def setup_iucn_webpage_for_scraping(url, driver):
     """
@@ -140,6 +238,56 @@ def scrape_page_into_dict(soup):
         iucn_dict[sci_name] = species_dict
 
     return iucn_dict
+
+def store_iucn_data(iucn_data):
+    """
+    Stores IUCN data into the species table, up to 25 entries
+
+    Parameters
+    ----------------------------
+    iucn_data: nested dict
+        species data from IUCN
+
+    Returns
+    ----------------------------
+    Integer: number of new entries stored
+    """
+    cursor, conn = set_up_tables()
+    count = 0
+    for sci_name, species_dict in iucn_data.items():
+        if count >= 25:
+            break
+        common_name = species_dict['Common Name']
+        pop_status = species_dict['Population Status']
+        red_list_category = species_dict['Red List Category']
+        location_str = species_dict['Location']
+        locations = IUCN_REGION_MAP.get(location_str, [])
+        if not locations:
+            for k, v in LOCATION_IDS.items():
+                if location_str in k:
+                    locations = [k]
+                    break
+            if not locations:
+                print(f"Could not map location {location_str} to a location_id, skipping.")
+                continue
+        for location in locations:
+            if count >= 25:
+                break
+            location_id = LOCATION_IDS.get(location)
+            if not location_id:
+                print(f"Could not map location {location} to a location_id, skipping.")
+                continue
+
+            cursor.execute("SELECT COUNT(*) FROM species WHERE common_name=? AND location_id=?", (common_name, location_id))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("INSERT OR IGNORE INTO species (common_name, population_status, red_list_category, location_id) VALUES (?, ?, ?, ?)",
+                            (common_name, pop_status, red_list_category, location_id))
+                count += 1
+                print(f"Stored IUCN species: {common_name} for Location ID {location_id}")
+    conn.commit()
+    conn.close()
+    print(f"Total IUCN species entries stored: {count}")
+    return count
 
 noaa_regions = [
     'globe',

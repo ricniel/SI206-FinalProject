@@ -1,7 +1,10 @@
 import requests
 import sqlite3
+import json
+import os
+import time
 
-API_KEY = "meLAyk4AU2GAy7eXPGxX4AOcJPTmK2DS"
+API_KEY = "	NpqJSgIjxipbcSLLe8NnvVorarnsZ2gh"
 #After looking at the rubric and debugging, we figured out that we needed shared integer keys
 #However, IUCN and the accuweather API both have different keys
 #With the help of Claude AI, I created this location map for the database.
@@ -27,7 +30,7 @@ LOCATION_MAP = {
     "260622": 19,  # Melbourne, Australia
     "208971": 20   # Accra, Ghana
 }
-
+API_CALL_COUNT = 0
 def create_database():
     """Set up the weather table in ecoalert.db with proper constraints.
     Inputs: None.
@@ -45,29 +48,87 @@ def create_database():
     )''')
     conn.commit()
     conn.close()
-    
-#Grok: to avoid going over hourly limit of 50 requests per hour, add limit = 5 in the parameters
-def get_weather(location_key, limit=5):
-    """Fetch 5-day weather forecast from AccuWeather API.
-    Inputs: location_key (str), limit (int, default 5).
-    Outputs: List of forecast dictionaries or empty list if failed."""
-    url = f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}?apikey={API_KEY}&metric=true"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()["DailyForecasts"][:limit]
-        else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return []
-    except:
-        print(f"Request failed")
-        return []
 
-def store_data():
+def load_weather_cache():
+    """Load cached weather data from weather_cache.json.
+    Inputs: None.
+    Outputs: Dictionary of cached weather data."""
+    cache_file = "weather_cache.json"
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as file:
+            try:
+                return json.load(file)
+            except:
+                return {}
+    return {}
+
+def save_weather_cache(cache):
+    """Save weather data to weather_cache.json.
+    Inputs: cache (dict) - Weather data to save.
+    Outputs: None."""
+    with open("weather_cache.json", "w") as f:
+        json.dump(cache, f)
+
+    
+#Grok: to avoid going over hourly limit of 50 requests per hour, add limit = 5 in the parameters, max_retries, retry_delay, max_apie calls
+def get_weather(location_key, limit=5, max_retries=3, retry_delay=3600, max_api_calls=5):
+    """Fetch 5-day weather forecast from AccuWeather API with caching and retry logic.
+    Inputs:
+        location_key (str): Location key for the API.
+        limit (int): Number of forecast days to return (default 5).
+        max_retries (int): Maximum number of retry attempts if rate limit is hit.
+        retry_delay (int): Delay in seconds between retries (default 1 hour).
+        max_api_calls (int): Maximum number of API calls allowed in this run.
+    Outputs:
+        List of forecast dictionaries or empty list if failed or limit reached."""
+    #grok: why is API call count not showing up? told me to use global
+    global API_CALL_COUNT
+    cache = load_weather_cache()
+    cache_key = f"{location_key}_{limit}"
+    if cache_key in cache:
+        print(f"Using cached weather data for location {location_key}")
+        return cache[cache_key]
+    if API_CALL_COUNT >= max_api_calls:
+        print(f"API call limit ({max_api_calls}) reached. Skipping API request for location {location_key}.")
+        return []
+    url = f"http://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}?apikey={API_KEY}&metric=true"
+    for attempt in range(max_retries + 1):
+        if API_CALL_COUNT >= max_api_calls:
+            print(f"API call limit ({max_api_calls}) reached during retries for location {location_key}.")
+            return []
+        try:
+            API_CALL_COUNT += 1
+            print(f"Making API request {API_CALL_COUNT}/{max_api_calls} for location {location_key}")
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()["DailyForecasts"][:limit]
+                # Cache the data
+                cache[cache_key] = data
+                save_weather_cache(cache)
+                return data
+            elif response.status_code == 503:
+                print(f"Error: {response.status_code} - {response.text}")
+                if attempt < max_retries:
+                    print(f"Rate limit exceeded. Retrying in {retry_delay // 60} minutes (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(retry_delay)
+                else:
+                    print("Max retries reached. Please wait for the rate limit to reset or use a different API key.")
+                    return []
+            else:
+                print("Error")
+                return []
+        except:
+            print("Request failed")
+            return []
+    return []
+
+def store_data(max_api_calls = 5):
     """Store up to 25 weather forecast entries in the database.
     Inputs: None.
     Outputs: Integer count of new entries stored."""
     conn = sqlite3.connect('ecoalert.db')
+    global API_CALL_COUNT
+    API_CALL_COUNT = 0
     cursor = conn.cursor()
     count = 0
     for k, v in LOCATION_MAP.items():
