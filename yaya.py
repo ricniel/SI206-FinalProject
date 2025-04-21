@@ -13,9 +13,7 @@ from selenium.webdriver import Safari
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-driver = webdriver.Chrome() 
-
-def scrape_noaa_data(region_list):
+def scrape_noaa_data(region_list, driver):
     """
     Scrapes NOAA site for avg yearly land and ocean temp going back 100 years
 
@@ -32,13 +30,13 @@ def scrape_noaa_data(region_list):
 
     temp_anomaly_list = []
     for region in region_list:
-        url = f'https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/global/time-series/{region}/tavg/land_ocean/12/12/1850-2024'
-
+        url = f'https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/global/time-series/{region}/tavg/land_ocean/12/12/1924-2024'
         driver.get(url)
+        time.sleep(2)
 
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         table = soup.find_all('tr', role='row')
-        for row in table[1:101]:
+        for row in table[1:]:
             year = row.find('a').text
             anomaly = row.find_all('td')[1].get('data-sortval')
             temp_anomaly_list.append((region, year, anomaly))
@@ -47,7 +45,7 @@ def scrape_noaa_data(region_list):
 
     pass
 
-def setup_iucn_webpage_for_scraping(url):
+def setup_iucn_webpage_for_scraping(url, driver):
     """
     Uses BS to take IUCN url to soup
 
@@ -149,12 +147,15 @@ noaa_regions = [
     'europe',
     'gulfOfAmerica',
 ]
-noaa_data = scrape_noaa_data(noaa_regions)
+
+driver = webdriver.Chrome() 
+
+noaa_data = scrape_noaa_data(noaa_regions, driver)
 with open("noaa_data.json", "w") as f:
     json.dump(noaa_data, f)
 
 iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&threats=11'
-iucn_soup = setup_iucn_webpage_for_scraping(iucn_url)
+iucn_soup = setup_iucn_webpage_for_scraping(iucn_url, driver)
 iucn_data = scrape_page_into_dict(iucn_soup)
 with open("iucn_data.json", "w") as f:
     json.dump(iucn_data, f)

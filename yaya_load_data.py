@@ -105,9 +105,9 @@ def set_up_iucn_species_table(data, cur, conn):
         if location == 'Global':
             species_info['Location Key'] = 0
         elif location == 'Europe':
-            species_info['Location Key'] = 3
+            species_info['Location Key'] = 2
         elif location == 'Gulf of Mexico':
-            species_info['Location Key'] = 7
+            species_info['Location Key'] = 3
         elif 'Africa' in location:
             species_info['Location Key'] = 1
         else:
