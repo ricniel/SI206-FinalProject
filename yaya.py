@@ -1,9 +1,6 @@
 from bs4 import BeautifulSoup
-import re
 import os
-import csv
-import unittest
-import requests
+import json
 import sqlite3
 import time
 
@@ -16,8 +13,22 @@ from selenium.webdriver import Safari
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+driver = webdriver.Chrome() 
+
 def scrape_noaa_data(region_list):
-    driver = Safari()
+    """
+    Scrapes NOAA site for avg yearly land and ocean temp going back 100 years
+
+    Parameters
+    ----------------------------
+    region_list: list
+        list of land regions NOAA can be filtered by
+
+    Returns
+    ----------------------------
+    temp_anomaly_list: list of tuples
+        each tuple consists of region, year, and avg temp anomaly 
+    """
 
     temp_anomaly_list = []
     for region in region_list:
@@ -27,7 +38,7 @@ def scrape_noaa_data(region_list):
 
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         table = soup.find_all('tr', role='row')
-        for row in table[1:]:
+        for row in table[1:101]:
             year = row.find('a').text
             anomaly = row.find_all('td')[1].get('data-sortval')
             temp_anomaly_list.append((region, year, anomaly))
@@ -36,43 +47,19 @@ def scrape_noaa_data(region_list):
 
     pass
 
-def noaa_region_table(data, cur, conn):
-    cur.execute('CREATE TABLE IF NOT EXISTS noaa_regions (id INTEGER KEY, region TEXT)')
-
-    for i in range(len(data)):
-        cur.execute("INSERT OR IGNORE INTO noaa_regions (id, region) VALUES (?, ?)", (i, data[i]))
-        
-    conn.commit()
-
-def noaa_yearly_table(data, cur, conn):
-    cur.execute('CREATE TABLE IF NOT EXISTS noaa_yearly_data (id INTEGER PRIMARY KEY, region_id INTEGER, year TEXT, anomaly NUMERIC)')
-
-    region_map = {}
-    for row in cur.execute("SELECT id, region FROM noaa_regions"):
-        region_map[row[1].lower()] = row[0] 
-    
-    transformed_data = []
-    for region_name, year, anomaly in data:
-        region_id = region_map.get(region_name.lower())
-        transformed_data.append((region_id, year, anomaly))
-
-    #CODE BELOW WRITTEN WITH HELP FROM CHATGPT
-    cur.execute("SELECT MAX(id) FROM noaa_yearly_data")
-    result = cur.fetchone()
-    current_max_id = result[0] if result[0] is not None else 0
-
-    start_index = current_max_id
-    batch = transformed_data[start_index:start_index + 25]
-
-    for i, region in enumerate(batch, start=start_index + 1):
-            cur.execute("INSERT OR IGNORE INTO noaa_yearly_data (id, region_id, year, anomaly) VALUES (?, ?, ?, ?)", (i, region[0], region[1], region[2]))
-
-    conn.commit()
-    print(f"Inserted rows {start_index + 1} to {start_index + len(batch)}")
-    #END OF CODE WRITTEN WITH HELP FROM CHATGPT
-
 def setup_iucn_webpage_for_scraping(url):
-    driver = Safari()
+    """
+    Uses BS to take IUCN url to soup
+
+    Parameters
+    ----------------------------
+    url: string
+        IUCN url
+
+    Returns
+    ----------------------------
+    soup
+    """
     # navigate to the target webpage
     driver.get(url)
 
@@ -92,33 +79,34 @@ def setup_iucn_webpage_for_scraping(url):
         print("⚠️ Could not find or click 'Remove':", e)
 
     # loads press more button 
-    # while True:
-    #     try: 
-    #         show_more = driver.find_element(By.CLASS_NAME, "section__link-out")
+    while True:
+        try: 
+            show_more = driver.find_element(By.CLASS_NAME, "section__link-out")
 
-    #         show_more.click()
+            show_more.click()
 
-    #         time.sleep(2)
-    #     except:
-    #         print("No more 'Show More' button found or it's not clickable anymore.")
-    #         break
+            time.sleep(2)
+        except:
+            print("No more 'Show More' button found or it's not clickable anymore.")
+            break
 
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
     return soup
 
-# def set_up_noaa_webpage_for_scraping(url):
-#     resp = requests.get(url)
-#     soup = BeautifulSoup(resp.content, 'html.parser')
-    
-#     return soup
-#     pass
-
-# def scrape_land_region(url):
-#     soup = setup_webpage_for_scraping(url)
-
-
 def scrape_page_into_dict(soup):
+    """
+    Scrapes IUCN soup to get dictionary for each species 
+
+    Parameters
+    ----------------------------
+    soup: IUCN page content
+
+    Returns
+    ----------------------------
+    nested dict:
+        information on each species 
+    """
 
     species_card_list = soup.find_all('li', class_='list-results__item')
 
@@ -144,120 +132,29 @@ def scrape_page_into_dict(soup):
 
         location = card.find('span', class_='species-assessment').text.strip()
         location_list = location.split(', ')
-        print(location_list)
+        location_str = location_list[0]
 
         species_dict['Common Name'] = common_name
         species_dict['Population Status'] = pop_status
         species_dict['Red List Category'] = species_status
-        species_dict['Location'] = location_list
+        species_dict['Location'] = location_str
 
         iucn_dict[sci_name] = species_dict
 
-    return(iucn_dict)
+    return iucn_dict
 
-
-def set_up_iucn_database(db_name):
-    path = os.path.dirname(os.path.abspath(__file__))
-    conn = sqlite3.connect(path + "/" + db_name)
-    cur = conn.cursor()
-    return cur, conn
-    pass
-
-def set_up_regional_assessment_table(data, cur, conn):
-    """
-    Sets up the land region table in the database
-
-    Parameters
-    ----------------------------
-    data: list
-        list of land regions as defined by the IUCN
-    cur: cursor
-        The database cursor object
-
-    conn: connection
-        The database connection object
-    """
-
-    cur.execute("CREATE TABLE IF NOT EXISTS geographical_scope (id INTEGER PRIMARY KEY, region TEXT)")
-
-    batch_size = 25
-    start_id = 1
-
-    for i in range(0, len(data), batch_size):
-        batch = data[i:i+batch_size]
-        for j, item in enumerate(batch):
-            cur.execute("INSERT INTO geographical_scope (id, region) VALUES (?, ?)", (start_id + j, item))
-        
-        conn.commit()
-        print(f"Inserted rows {i+1} to {i+len(batch)}")
-
-    pass
-
-def set_up_tables(data, cur, conn):
-    """
-    Sets up the tables in the database using the dictionary 
-
-    Parameters
-    ----------------------------
-    data: nested dictionary 
-        scientific species name as key and 
-    cur: cursor
-        The database cursor object
-
-    conn: connection
-        The database connection object
-    """
-
-    cur.execute(
-        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, common_name TEXT, population_status TEXT, red_list_category TEXT, geographical_scope INT, land_region2 INT, land_region3 INT)"
-    )
-
-    pass
-
-
-#RUN CODE
 noaa_regions = [
     'globe',
     'africa',
-    'asia',
     'europe',
-    'northAmerica',
-    'oceania',
-    'southAmerica',
     'gulfOfAmerica',
-    'arctic',
-    'antarctic'
 ]
-
-iucn_regions = [
-    'Global',
-    'Europe',
-    'Mediterranean',
-    'Pan-Africa',
-    'Central Africa',
-    'Eastern Africa',
-    'Western Africa',
-    'Gulf of Mexico',
-    'S. Africa FW',
-    'Persian Gulf',
-    'Northern Africa',
-    'Northeastern Africa',
-    'Carribbean',
-    'Arabian Sea'
-]
-
 noaa_data = scrape_noaa_data(noaa_regions)
+with open("noaa_data.json", "w") as f:
+    json.dump(noaa_data, f)
 
-#iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&threats=11'
-
-#iucn_soup = setup_iucn_webpage_for_scraping(iucn_url)
-#scrape_page_into_dict(iucn_soup)
-
-cur, conn = set_up_iucn_database('iucn.db')
-noaa_region_table(noaa_regions, cur, conn)
-noaa_yearly_table(noaa_data, cur, conn)
-
-
-#set_up_regional_assessment_table(iucn_regions, cur, conn)
-
-
+iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&threats=11'
+iucn_soup = setup_iucn_webpage_for_scraping(iucn_url)
+iucn_data = scrape_page_into_dict(iucn_soup)
+with open("iucn_data.json", "w") as f:
+    json.dump(iucn_data, f)
