@@ -82,7 +82,29 @@ def set_up_iucn_database(db_name):
     return cur, conn
     pass
 
-def set_up_iucn_species_table(data, cur, conn):
+def set_up_iucn_red_list_table(data, cur, conn):
+    """
+    Sets up the red list category table in the database using list of categories
+
+    Parameters
+    ----------------------------
+    data: list
+        red list categories
+    cur: cursor
+        The database cursor object
+
+    conn: connection
+        The database connection object
+    """
+    cur.execute("CREATE TABLE IF NOT EXISTS red_list_cat (id INTEGER PRIMARY KEY, red_list_category TEXT)")
+
+    for i in range(len(data)):
+        cur.execute("INSERT OR IGNORE INTO red_list_cat (id, red_list_category) VALUES (?,?)", (i, data[i]))
+    
+    conn.commit()
+
+
+def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn):
     """
     Sets up the species table in the database using the dictionary 
 
@@ -98,20 +120,43 @@ def set_up_iucn_species_table(data, cur, conn):
     """
 
     cur.execute(
-        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, species TEXT, common_name TEXT, population_status TEXT, red_list_category TEXT, geographical_scope TEXT, geo_key INT)"
+        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, species TEXT, common_name TEXT, population_status TEXT, geo_key INT, red_list_key INT)"
     )
+    # for species_info in data.values():
+    #     location = species_info['Location']
+    #     if location == 'Global':
+    #         species_info['Location Key'] = 0
+    #     elif location == 'Europe':
+    #         species_info['Location Key'] = 2
+    #     elif location == 'Gulf of Mexico':
+    #         species_info['Location Key'] = 3
+    #     elif 'Africa' in location:
+    #         species_info['Location Key'] = 1
+    #     else:
+    #         species_info['Location Key'] = 0
+    
+    # for species_info in data.values():
+    #     red_list_cat = species_info['Red List Category']
+    #     if red_list_cat == 'Not Evaluated':
+    #         species_info['Red List Key'] = 0
+    #     elif red_list_cat == 'Data Deficient':
+    #         species_info['Red List Key'] = 1
+    #     elif red_list_cat == 'Least Concern':
+    #         species_info['Red List Key']
+
+    location_map = {region.lower(): idx for idx, region in enumerate(noaa_regions)}
+    red_list_map = {cat: idx for idx, cat in enumerate(red_list_categories)}
+
     for species_info in data.values():
-        location = species_info['Location']
-        if location == 'Global':
-            species_info['Location Key'] = 0
-        elif location == 'Europe':
-            species_info['Location Key'] = 2
-        elif location == 'Gulf of Mexico':
-            species_info['Location Key'] = 3
-        elif 'Africa' in location:
-            species_info['Location Key'] = 1
-        else:
-            species_info['Location Key'] = 0
+        # Normalize location string
+        loc = species_info['Location'].lower().replace(' ', '')
+        # Find a matching NOAA region key (default to 'globe' or index 0)
+        matched = next((key for key in location_map if key in loc), 'globe')
+        species_info['Location Key'] = location_map.get(matched, 0)
+
+        # Red List key based on category index (default to 0 if not found)
+        red_list_cat = species_info['Red List Category']
+        species_info['Red List Key'] = red_list_map.get(red_list_cat, 0)
 
     #CODE BELOW WRITTEN WITH HELP FROM CHATGPT
     cur.execute("SELECT MAX(id) FROM species")
@@ -124,10 +169,9 @@ def set_up_iucn_species_table(data, cur, conn):
 
     for i, (sci_name, species_info) in enumerate(batch, start=start_index + 1):
         cur.execute("""INSERT OR IGNORE INTO species 
-            (id, species, common_name, population_status, red_list_category, geographical_scope, geo_key) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-            (i, sci_name, species_info['Common Name'], species_info['Population Status'], 
-            species_info['Red List Category'], species_info['Location'], species_info['Location Key']))
+            (id, species, common_name, population_status, geo_key, red_list_key) 
+            VALUES (?, ?, ?, ?, ?, ?)""", 
+            (i, sci_name, species_info['Common Name'], species_info['Population Status'], species_info['Location Key'], species_info['Red List Key']))
 
 
     conn.commit()
@@ -145,6 +189,18 @@ noaa_regions = [
     'gulfOfAmerica',
 ]
 
+red_list_categories = [
+    'Not Evaluated',
+    'Data Deficient',
+    'Least Concern',
+    'Near Threatened',
+    'Vulnerable',
+    'Endangered',
+    'Critically Endangered',
+    'Extinct in the Wild',
+    'Extinct'
+]
+
 with open("noaa_data.json") as f:
     noaa_data = json.load(f)
 
@@ -155,4 +211,5 @@ cur, conn = set_up_iucn_database('iucn.db')
 noaa_region_table(noaa_regions, cur, conn)
 noaa_yearly_table(noaa_data, cur, conn)
 
-set_up_iucn_species_table(iucn_data, cur, conn)
+set_up_iucn_red_list_table(red_list_categories, cur, conn)
+set_up_iucn_species_table(iucn_data, red_list_categories, noaa_regions, cur, conn)
