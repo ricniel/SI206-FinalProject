@@ -302,7 +302,7 @@ noaa_data = scrape_noaa_data(noaa_regions, driver)
 with open("noaa_data.json", "w") as f:
     json.dump(noaa_data, f)
 
-iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&threats=11'
+iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&redListCategory=CR,EN&taxonomies=MAMMALIA,AVES,REPTILIA'
 iucn_soup = setup_iucn_webpage_for_scraping(iucn_url, driver)
 iucn_data = scrape_page_into_dict(iucn_soup)
 with open("iucn_data.json", "w") as f:
