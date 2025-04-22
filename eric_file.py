@@ -81,11 +81,11 @@ def save_weather_cache(cache):
 def get_weather(location_key, limit=5, max_retries=3, retry_delay=3600, max_api_calls=5):
     """Fetch 5-day weather forecast from AccuWeather API with caching and retry logic.
     Inputs:
-        location_key (str): Location key for the API.
-        limit (int): Number of forecast days to return (default 5).
-        max_retries (int): Maximum number of retry attempts if rate limit is hit.
-        retry_delay (int): Delay in seconds between retries (default 1 hour).
-        max_api_calls (int): Maximum number of API calls allowed in this run.
+        location_key : Location key for the API.
+        limit : Number of forecast days to return (default 5).
+        max_retries : Maximum number of retry attempts if rate limit is hit.
+        retry_delay : Delay in seconds between retries (default 1 hour).
+        max_api_calls : Maximum number of API calls allowed in this run.
     Outputs:
         List of forecast dictionaries or empty list if failed or limit reached."""
     #grok: why is API call count not showing up? told me to use global
