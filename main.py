@@ -1,9 +1,9 @@
 import sqlite3
 import eric_file
-import yaya
-import json
+import csv
+import seaborn as sns
+import numpy as np
 import matplotlib.pyplot as plt
-
 
 def join_tables():
     """Merges weather and species tables to show unique species per row.
@@ -112,33 +112,111 @@ def visualize_data(join_data, stats_data):
     plt.savefig("visualizations.png")
     plt.show()
 
+def get_species_count_by_region_and_status():
+    conn = sqlite3.connect('iucn.db')
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT noaa_regions.region, red_list_cat.red_list_category, COUNT(*) as species_count
+        FROM species
+        JOIN noaa_regions ON noaa_regions.id = species.geo_key
+        JOIN red_list_cat ON red_list_cat.id = species.red_list_key 
+        WHERE species.red_list_key >= ?
+        GROUP BY noaa_regions.id, species.red_list_key
+    """, (2,))
+    
+    data = cur.fetchall()
+
+    with open('species_temp_data.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Region", "Red List Name", "Species Count"])
+        writer.writerows(data)
+
+def heatmap():
+    # Step 1: Define custom Red List category order
+    custom_order = [
+        "Least Concern",
+        "Near Threatened",
+        "Vulnerable",
+        "Endangered",
+        "Critically Endangered",
+        "Extinct in the Wild",
+        "Extinct"
+    ]
+
+    # Step 2: Read data from CSV
+    species_file = 'species_temp_data.csv'
+    species_data = []
+    regions_set = set()
+    valid_names = set(custom_order)
+
+    with open(species_file, newline='') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            region = row['Region']
+            name = row['Red List Name']
+            if name not in valid_names:
+                continue  # skip unknown categories
+            count = int(row['Species Count'])
+            species_data.append((region, name, count))
+            regions_set.add(region)
+
+    # Step 3: Build matrix
+    regions = sorted(regions_set)
+    region_idx = {r: i for i, r in enumerate(regions)}
+    name_idx = {n: i for i, n in enumerate(custom_order)}
+
+    matrix = np.zeros((len(regions), len(custom_order)), dtype=int)
+
+    for region, name, count in species_data:
+        i = region_idx[region]
+        j = name_idx[name]
+        matrix[i][j] = count
+
+    # Step 4: Plot heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(
+        matrix,
+        annot=True,
+        fmt="d",
+        cmap="YlGnBu",
+        xticklabels=custom_order,
+        yticklabels=regions,
+        linewidths=0.5,
+        cbar_kws={'label': 'Species Count'}
+    )
+
+    plt.title("Species Count by Region and Red List Category")
+    plt.xlabel("Red List Category")
+    plt.ylabel("Region")
+    plt.tight_layout()
+    plt.savefig('heatmap_viz.png')
+    plt.show()
+
 if __name__ == "__main__":
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    try:
-        eric_file.create_database()
-        yaya.set_up_tables()
-        #Grok: How do I ensure this makes 100 rows? instructed me to use for _ throughout the main function. 
-        for _ in range(5):
-            weather_count = eric_file.store_data()
-            print(f"Stored {weather_count} weather rows")
-        noaa_regions = ['globe', 'africa', 'europe', 'gulfOfAmerica']
-        for _ in range(5):
-            noaa_data = yaya.scrape_noaa_data(noaa_regions, driver)
-            with open("noaa_data.json", "w") as f:
-                json.dump(noaa_data, f)
-            noaa_count = yaya.store_noaa_data(noaa_data)
-            print(f"Stored {noaa_count} NOAA rows")
-        iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&redListCategory=CR,EN&taxonomies=MAMMALIA,AVES,REPTILIA'
-        for _ in range(5):
-            iucn_soup = yaya.setup_iucn_webpage_for_scraping(iucn_url, driver)
-            iucn_data = yaya.scrape_page_into_dict(iucn_soup)
-            with open("iucn_data.json", "w") as f:
-                json.dump(iucn_data, f)
-            iucn_count = yaya.store_iucn_data(iucn_data)
-            print(f"Stored {iucn_count} IUCN rows")
-        join_results = join_tables()
-        stats_results = calculate_stats()
-        visualize_data(join_results, stats_results)
-    #Grok: finally is used for quitting the driver. My partner did that section, so I am unfamilar with that code.
-    finally:
-        driver.quit()
+    eric_file.create_database()
+    #yaya.set_up_tables()
+    #Grok: How do I ensure this makes 100 rows? instructed me to use for _ throughout the main function. 
+    for _ in range(5):
+        weather_count = eric_file.store_data()
+        print(f"Stored {weather_count} weather rows")
+    noaa_regions = ['globe', 'africa', 'europe', 'gulfOfAmerica']
+    # for _ in range(5):
+    #     noaa_data = yaya.scrape_noaa_data(noaa_regions, driver)
+    #     with open("noaa_data.json", "w") as f:
+    #         json.dump(noaa_data, f)
+    #     noaa_count = yaya.store_noaa_data(noaa_data)
+    #     print(f"Stored {noaa_count} NOAA rows")
+    # iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&redListCategory=CR,EN&taxonomies=MAMMALIA,AVES,REPTILIA'
+    # for _ in range(5):
+    #     iucn_soup = yaya.setup_iucn_webpage_for_scraping(iucn_url, driver)
+    #     iucn_data = yaya.scrape_page_into_dict(iucn_soup)
+    #     with open("iucn_data.json", "w") as f:
+    #         json.dump(iucn_data, f)
+    #     iucn_count = yaya.store_iucn_data(iucn_data)
+    #     print(f"Stored {iucn_count} IUCN rows")
+    join_results = join_tables()
+    stats_results = calculate_stats()
+    visualize_data(join_results, stats_results)
+    get_species_count_by_region_and_status()
+    heatmap()

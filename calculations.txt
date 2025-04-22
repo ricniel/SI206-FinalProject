@@ -1,4 +1,4 @@
-Location ID | Avg Temp (°C) | Species Count | Recent Temp Anomaly (°C) | Avg Wind Speed (km/h)
+Location ID | Avg Temp (Â°C) | Species Count | Recent Temp Anomaly (Â°C) | Avg Wind Speed (km/h)
 ------------------------------------------------------------------------------------------
 1           | 22.3          | 11            | 1.05                    | 0.0    
 2           | 17.3          | 11            | 1.05                    | 0.0    
