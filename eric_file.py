@@ -36,14 +36,21 @@ def create_database():
     Inputs: None.
     Outputs: Creates table with integer location_id for joining."""
     conn = sqlite3.connect("ecoalert.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS weather (
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS weather (
         weather_id INTEGER PRIMARY KEY AUTOINCREMENT,
         location_id INTEGER,
         date TEXT,
         temperature REAL,
         humidity REAL,
         precipitation REAL,
+        UNIQUE(location_id, date)
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS weather_details (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        location_id INTEGER,
+        date TEXT,
+        wind_speed REAL,
         UNIQUE(location_id, date)
     )''')
     conn.commit()
@@ -145,6 +152,7 @@ def store_data(max_api_calls = 5):
             if cursor.fetchone()[0] == 0:
                 #Grok: to fix a key error, add a default precipitation value
                 precipitation = 50.0 if item["Day"].get("HasPrecipitation", False) else 0.0
+                #Note: Due to using Accuweather's free API, humidity has been hardcoded to 50.
                 cursor.execute("INSERT OR IGNORE INTO weather (location_id, date, temperature, humidity, precipitation) VALUES (?, ?, ?, ?, ?)", (v, date, item["Temperature"]["Maximum"]["Value"], 50.0, precipitation))
                 count += 1
     conn.commit()
