@@ -2,7 +2,6 @@ from bs4 import BeautifulSoup
 import os
 import json
 import sqlite3
-import time
 
 def noaa_region_table(data, cur, conn):
     """
@@ -122,28 +121,8 @@ def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn
     cur.execute(
         "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, species TEXT, common_name TEXT, population_status TEXT, geo_key INT, red_list_key INT)"
     )
-    # for species_info in data.values():
-    #     location = species_info['Location']
-    #     if location == 'Global':
-    #         species_info['Location Key'] = 0
-    #     elif location == 'Europe':
-    #         species_info['Location Key'] = 2
-    #     elif location == 'Gulf of Mexico':
-    #         species_info['Location Key'] = 3
-    #     elif 'Africa' in location:
-    #         species_info['Location Key'] = 1
-    #     else:
-    #         species_info['Location Key'] = 0
-    
-    # for species_info in data.values():
-    #     red_list_cat = species_info['Red List Category']
-    #     if red_list_cat == 'Not Evaluated':
-    #         species_info['Red List Key'] = 0
-    #     elif red_list_cat == 'Data Deficient':
-    #         species_info['Red List Key'] = 1
-    #     elif red_list_cat == 'Least Concern':
-    #         species_info['Red List Key']
 
+    # HELP FROM CHATGPT TO ASSIGN KEYS 
     location_map = {region.lower(): idx for idx, region in enumerate(noaa_regions)}
     red_list_map = {cat: idx for idx, cat in enumerate(red_list_categories)}
 
@@ -206,6 +185,8 @@ with open("noaa_data.json") as f:
 
 with open("iucn_data.json") as f:
     iucn_data = json.load(f)
+
+print(len(iucn_data))
 
 cur, conn = set_up_iucn_database('iucn.db')
 noaa_region_table(noaa_regions, cur, conn)
