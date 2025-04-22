@@ -4,7 +4,7 @@ import json
 import os
 import time
 
-API_KEY = "	NpqJSgIjxipbcSLLe8NnvVorarnsZ2gh"
+API_KEY = "meLAyk4AU2GAy7eXPGxX4AOcJPTmK2DS"
 #After looking at the rubric and debugging, we figured out that we needed shared integer keys
 #However, IUCN and the accuweather API both have different keys
 #With the help of Claude AI, I created this location map for the database.
@@ -55,6 +55,14 @@ def create_database():
     )''')
     conn.commit()
     conn.close()
+def clear_cache():
+    """Clear the weather cache by deleting weather_cache.json.
+    Inputs: None.
+    Outputs: None."""
+    cache_file = "weather_cache.json"
+    if os.path.exists(cache_file):
+        os.remove(cache_file)
+        print(f"Cleared cache: {cache_file}")
 
 def load_weather_cache():
     """Load cached weather data from weather_cache.json.
@@ -129,36 +137,41 @@ def get_weather(location_key, limit=5, max_retries=3, retry_delay=3600, max_api_
             return []
     return []
 
-def store_data(max_api_calls = 5):
-    """Store up to 25 weather forecast entries in the database.
-    Inputs: None.
-    Outputs: Integer count of new entries stored."""
+def store_data(max_api_calls=5):
+    """Store up to 25 weather forecast entries in the database, ensuring no duplicate string data.
+    Inputs:
+        max_api_calls (int): Maximum number of API calls allowed in this run.
+    Outputs:
+        Integer count of new entries stored."""
     conn = sqlite3.connect('ecoalert.db')
+    cursor = conn.cursor()
     global API_CALL_COUNT
     API_CALL_COUNT = 0
-    cursor = conn.cursor()
     count = 0
     for k, v in LOCATION_MAP.items():
         if count >= 25:
             break
-        weather = get_weather(k)
+        weather = get_weather(k, max_api_calls=max_api_calls)
         for item in weather:
             if count >= 25:
                 break
-            #Grok: how do I pull the correct date format?
             date = item["Date"][:10]
             cursor.execute("SELECT COUNT(*) FROM weather WHERE location_id=? AND date=?", (v, date))
-            #Claude: What cursor.fetchone line could I write to ensure no duplicates?
             if cursor.fetchone()[0] == 0:
-                #Grok: to fix a key error, add a default precipitation value
                 precipitation = 50.0 if item["Day"].get("HasPrecipitation", False) else 0.0
-                #Note: Due to using Accuweather's free API, humidity has been hardcoded to 50.
-                cursor.execute("INSERT OR IGNORE INTO weather (location_id, date, temperature, humidity, precipitation) VALUES (?, ?, ?, ?, ?)", (v, date, item["Temperature"]["Maximum"]["Value"], 50.0, precipitation))
-                count += 1
+                cursor.execute("INSERT OR IGNORE INTO weather (location_id, date, temperature, humidity, precipitation) VALUES (?, ?, ?, ?, ?)",
+                               (v, date, item["Temperature"]["Maximum"]["Value"], 50.0, precipitation))
+                cursor.execute("SELECT COUNT(*) FROM weather_details WHERE location_id=? AND date=?", (v, date))
+                if cursor.fetchone()[0] == 0:
+                    wind_speed = item["Day"].get("Wind", {}).get("Speed", {}).get("Value", 0.0)
+                    cursor.execute("INSERT OR IGNORE INTO weather_details (location_id, date, wind_speed) VALUES (?, ?, ?)",
+                                   (v, date, wind_speed))
+                    count += 1
     conn.commit()
     conn.close()
     return count
 
 if __name__ == "__main__":
+    clear_cache()
     create_database()
     store_data()
