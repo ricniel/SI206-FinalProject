@@ -113,6 +113,18 @@ def visualize_data(join_data, stats_data):
     plt.show()
 
 def get_species_count_by_region_and_status():
+    """
+    Gets region, red list name, and species count grouped by region and red list category from iucn database
+
+    Parameters
+    ----------------------------
+    none
+
+    Returns
+    ----------------------------
+    csv: "species_temp_data.csv"
+        csv with columns "Region", "Red List Name", "Species Count"
+    """
     conn = sqlite3.connect('iucn.db')
     cur = conn.cursor()
     
@@ -133,6 +145,19 @@ def get_species_count_by_region_and_status():
         writer.writerows(data)
 
 def heatmap():
+    """
+    Creates heat map from species_temp_data.csv
+
+    Parameters
+    ----------------------------
+    none
+
+    Returns
+    ----------------------------
+    png: heatmap_viz.png
+    
+    WRITTEN WITH HELP FROM CHATGPT
+    """
     # Step 1: Define custom Red List category order
     custom_order = [
         "Least Concern",
@@ -161,7 +186,7 @@ def heatmap():
             species_data.append((region, name, count))
             regions_set.add(region)
 
-    # Step 3: Build matrix
+    # Step 3: Build matrix 
     regions = sorted(regions_set)
     region_idx = {r: i for i, r in enumerate(regions)}
     name_idx = {n: i for i, n in enumerate(custom_order)}
@@ -201,20 +226,7 @@ if __name__ == "__main__":
         weather_count = eric_file.store_data()
         print(f"Stored {weather_count} weather rows")
     noaa_regions = ['globe', 'africa', 'europe', 'gulfOfAmerica']
-    # for _ in range(5):
-    #     noaa_data = yaya.scrape_noaa_data(noaa_regions, driver)
-    #     with open("noaa_data.json", "w") as f:
-    #         json.dump(noaa_data, f)
-    #     noaa_count = yaya.store_noaa_data(noaa_data)
-    #     print(f"Stored {noaa_count} NOAA rows")
-    # iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&redListCategory=CR,EN&taxonomies=MAMMALIA,AVES,REPTILIA'
-    # for _ in range(5):
-    #     iucn_soup = yaya.setup_iucn_webpage_for_scraping(iucn_url, driver)
-    #     iucn_data = yaya.scrape_page_into_dict(iucn_soup)
-    #     with open("iucn_data.json", "w") as f:
-    #         json.dump(iucn_data, f)
-    #     iucn_count = yaya.store_iucn_data(iucn_data)
-    #     print(f"Stored {iucn_count} IUCN rows")
+
     join_results = join_tables()
     stats_results = calculate_stats()
     visualize_data(join_results, stats_results)
