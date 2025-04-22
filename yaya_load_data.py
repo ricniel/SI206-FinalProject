@@ -62,6 +62,15 @@ def noaa_yearly_table(data, cur, conn):
     print(f"Inserted rows {start_index + 1} to {start_index + len(batch)}")
     #END OF CODE WRITTEN WITH HELP FROM CHATGPT
 
+def population_status_table(data, cur, conn):
+
+    cur.execute('CREATE TABLE IF NOT EXISTS population_status (id INTEGER PRIMARY KEY, population_status TEXT)')
+
+    for i in range(len(data)):
+        cur.execute('INSERT OR IGNORE INTO population_status (id, population_status) VALUES (?, ?)', (i, data[i]))
+
+    conn.commit()
+
 def set_up_iucn_database(db_name):
     """
     Sets up database
@@ -103,7 +112,7 @@ def set_up_iucn_red_list_table(data, cur, conn):
     conn.commit()
 
 
-def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn):
+def set_up_iucn_species_table(data, red_list_categories, noaa_regions, population_status, cur, conn):
     """
     Sets up the species table in the database using the dictionary 
 
@@ -119,12 +128,13 @@ def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn
     """
 
     cur.execute(
-        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, species TEXT, common_name TEXT, population_status TEXT, geo_key INT, red_list_key INT)"
+        "CREATE TABLE IF NOT EXISTS species (id INTEGER PRIMARY KEY, species TEXT, common_name TEXT, population_status_key INT, geo_key INT, red_list_key INT)"
     )
 
     # HELP FROM CHATGPT TO ASSIGN KEYS 
     location_map = {region.lower(): idx for idx, region in enumerate(noaa_regions)}
     red_list_map = {cat: idx for idx, cat in enumerate(red_list_categories)}
+    population_status_map = {cat: idx for idx, cat in enumerate(population_status)}
 
     for species_info in data.values():
         # Normalize location string
@@ -137,6 +147,10 @@ def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn
         red_list_cat = species_info['Red List Category']
         species_info['Red List Key'] = red_list_map.get(red_list_cat, 0)
 
+        pop_status = species_info.get('Population Status', '')
+        species_info['Population Status Key'] = population_status_map.get(pop_status, 0)
+
+
     #CODE BELOW WRITTEN WITH HELP FROM CHATGPT
     cur.execute("SELECT MAX(id) FROM species")
     result = cur.fetchone()
@@ -148,9 +162,9 @@ def set_up_iucn_species_table(data, red_list_categories, noaa_regions, cur, conn
 
     for i, (sci_name, species_info) in enumerate(batch, start=start_index + 1):
         cur.execute("""INSERT OR IGNORE INTO species 
-            (id, species, common_name, population_status, geo_key, red_list_key) 
+            (id, species, common_name, population_status_key, geo_key, red_list_key) 
             VALUES (?, ?, ?, ?, ?, ?)""", 
-            (i, sci_name, species_info['Common Name'], species_info['Population Status'], species_info['Location Key'], species_info['Red List Key']))
+            (i, sci_name, species_info['Common Name'], species_info['Population Status Key'], species_info['Location Key'], species_info['Red List Key']))
 
 
     conn.commit()
@@ -180,6 +194,13 @@ red_list_categories = [
     'Extinct'
 ]
 
+population_status = [
+    'Unknown', 
+    'Stable',
+    'Decreasing',
+    'Increasing'
+]
+
 with open("noaa_data.json") as f:
     noaa_data = json.load(f)
 
@@ -193,4 +214,6 @@ noaa_region_table(noaa_regions, cur, conn)
 noaa_yearly_table(noaa_data, cur, conn)
 
 set_up_iucn_red_list_table(red_list_categories, cur, conn)
-set_up_iucn_species_table(iucn_data, red_list_categories, noaa_regions, cur, conn)
+population_status_table(population_status, cur, conn)
+
+set_up_iucn_species_table(iucn_data, red_list_categories, noaa_regions, population_status, cur, conn)
