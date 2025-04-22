@@ -1,16 +1,18 @@
 Region,Red List Name,Species Count
-globe,Least Concern,191
-globe,Near Threatened,24
-globe,Vulnerable,39
-globe,Endangered,50
-globe,Critically Endangered,38
-globe,Extinct,2
-africa,Least Concern,15
+globe,Least Concern,472
+globe,Near Threatened,65
+globe,Vulnerable,107
+globe,Endangered,122
+globe,Critically Endangered,89
+globe,Extinct in the Wild,2
+globe,Extinct,3
+africa,Least Concern,16
 africa,Near Threatened,2
 africa,Vulnerable,2
 africa,Endangered,1
 africa,Critically Endangered,1
-europe,Least Concern,48
-europe,Near Threatened,5
-europe,Vulnerable,2
-europe,Endangered,1
+europe,Least Concern,302
+europe,Near Threatened,28
+europe,Vulnerable,17
+europe,Endangered,7
+europe,Critically Endangered,2
