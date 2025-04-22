@@ -1,10 +1,5 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import sqlite3
-import eric_file
-import yaya
-import json
+import csv
 
 
 def join_tables():
@@ -67,21 +62,35 @@ def calculate_stats():
         print(f"{location_id:<11} | {avg_temp:<13.1f} | {species_count}")
     conn.close()
 
-if __name__ == "__main__":
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    eric_file.create_database()
-    yaya.set_up_tables()
-    weather_count = eric_file.store_data()
-    noaa_regions = ['globe', 'africa', 'europe', 'gulfOfAmerica']
-    noaa_data = yaya.scrape_noaa_data(noaa_regions, driver)
-    with open("noaa_data.json", "w") as f:
-        json.dump(noaa_data, f)
-    noaa_count = yaya.store_noaa_data(noaa_data)
-    iucn_url = 'https://www.iucnredlist.org/search/list?query=&searchType=species&threats=11'
-    iucn_soup = yaya.setup_iucn_webpage_for_scraping(iucn_url, driver)
-    iucn_data = yaya.scrape_page_into_dict(iucn_soup)
-    with open("iucn_data.json", "w") as f:
-        json.dump(iucn_data, f)
-    iucn_count = yaya.store_iucn_data(iucn_data)
-    join_tables()
-    calculate_stats()
+def get_global_temp_historic():
+    conn = sqlite3.connect('iucn.db')
+    cur = conn.cursor()
+
+    cur.execute("""SELECT year, anomaly FROM noaa_yearly_data WHERE region_id = ?""", (0,))
+    data = cur.fetchall()
+
+    with open('output.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Year", "Anomaly"])
+        writer.writerows(data)
+
+def get_global_iucn():
+    conn = sqlite3.connect('iucn.db')
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT species.species, species.population_status, red_list_cat.red_list_category
+        FROM species 
+        JOIN red_list_cat ON species.red_list_key = red_list_cat.id
+        WHERE species.geo_key != ? AND species.red_list_key >= ?
+    """, (0, 4))
+
+    data = cur.fetchall()
+
+    with open('output.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Species", "Population Status", "Red List Category"])
+        writer.writerows(data)
+
+join_tables()
+calculate_stats()
