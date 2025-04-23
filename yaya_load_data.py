@@ -11,6 +11,12 @@ def noaa_region_table(data, cur, conn):
     ----------------------------
     data: list
         same regions list as above
+    
+    cur: cursor
+        The database cursor object
+
+    conn: connection
+        The database connection object
 
     Returns
     ----------------------------
@@ -31,6 +37,12 @@ def noaa_yearly_table(data, cur, conn):
     ----------------------------
     data: list of tuples 
         scrape_noaa_data output
+
+    cur: cursor
+        The database cursor object
+
+    conn: connection
+        The database connection object
 
     Returns
     ----------------------------
@@ -63,6 +75,24 @@ def noaa_yearly_table(data, cur, conn):
     #END OF CODE WRITTEN WITH HELP FROM CHATGPT
 
 def population_status_table(data, cur, conn):
+    """
+    Creates population status table
+
+    Parameters
+    ----------------------------
+    data: list
+        list of population status options
+        
+    cur: cursor
+        The database cursor object
+
+    conn: connection
+        The database connection object
+
+    Returns
+    ----------------------------
+    Nothing
+    """
 
     cur.execute('CREATE TABLE IF NOT EXISTS population_status (id INTEGER PRIMARY KEY, population_status TEXT)')
 
